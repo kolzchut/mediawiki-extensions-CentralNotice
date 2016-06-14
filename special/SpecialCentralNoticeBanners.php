@@ -47,7 +47,7 @@ class SpecialCentralNoticeBanners extends CentralNotice {
 		$this->setHeaders();
 		$this->editable = $this->getUser()->isAllowed( 'centralnotice-admin' );
 		// Make sure we have a session
-		$this->getRequest()->getSession()->persist();
+		wfSetupSession();
 
 		// Load things that may have been serialized into the session
 		$this->bannerLanguagePreview = $this->getCNSessionVar(
