@@ -4,7 +4,9 @@
 			"Aftab1995",
 			"Bellayet",
 			"Nasir8891",
-			"Wikitanvir"
+			"Wikitanvir",
+			"Aftabuzzaman",
+			"Bodhisattwa"
 		]
 	},
 	"centralnotice": "কেন্দ্রীয় নোটিশ প্রশাসক",
@@ -105,8 +107,6 @@
 	"centralnotice-banner-hidable": "স্ট্যাটিক/লুকানোযোগ্য",
 	"centralnotice-banner-collapsible": "ভাঁজযোগ্য",
 	"centralnotice-banner-fundraising": "অনুদান সংগ্রহের ব্যানার",
-	"centralnotice-banner-autolink": "সয়ংক্রিয়ভাবে ল্যান্ডিং পাতার লিংক তৈরী হয়েছে",
-	"centralnotice-banner-landing-pages": "ল্যান্ডিং পেজ (কমা দ্বারা আলাদা):",
 	"centralnotice-geo": "স্থানাংকলক্ষ্য",
 	"centralnotice-countries": "দেশ",
 	"centralnotice-allocation": "বরাদ্দ",
@@ -120,6 +120,7 @@
 	"centralnotice-percentage": "শতাংশ",
 	"centralnotice-documentwrite-error": "ব্যানারের জন্য document.write() ব্যবহার করা যাবে না।\nবিস্তারিত জানতে দেখুন http://meta.wikimedia.org/wiki/Help:CentralNotice।",
 	"centralnotice-preferred": "গুরুত্বপূর্ণ",
+	"centralnotice-archived": "আর্কাইভ করা হয়েছে",
 	"centralnotice-logs": "লগ",
 	"centralnotice-view-logs": "লগ দেখাও",
 	"centralnotice-timestamp": "সময়বার্তা",
@@ -157,6 +158,9 @@
 	"centralnotice-priority-normal": "সাধারণ",
 	"centralnotice-priority-high": "ভাল",
 	"centralnotice-priority-emergency": "জরুরী",
+	"centralnotice-country-eu": "অজানা/ইউরোপীয় ইউনিয়নের অঞ্চল",
+	"centralnotice-country-ap": "অজানা/এশীয় প্রশান্ত মহাসগরীয় অঞ্চল",
+	"centralnotice-country-o1": "অজানা/অন্য দেশ",
 	"centralnotice-devicetype-desktop": "ডেস্কটপ কম্পিউটার",
 	"centralnotice-all": "সমস্ত",
 	"centralnotice-banner-class": "বিষয়শ্রেণী",

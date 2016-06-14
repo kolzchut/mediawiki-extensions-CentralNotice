@@ -212,5 +212,7 @@
 	"centralnotice-banner-not-found-title": "Banner net fonnt",
 	"hidebanners": "Bannere verstoppen",
 	"apihelp-centralnoticeallocations-param-language": "D'Sprooch op déi filtert gi soll.",
-	"apihelp-query+centralnoticelogs-param-user": "Benotzernumm (fakultativ)."
+	"apihelp-query+centralnoticelogs-param-user": "Benotzernumm (fakultativ).",
+	"centralnotice-large-banner-limit-days": "Dauer vun der Ënnerbriechung",
+	"centralnotice-large-banner-limit-identifier": "Numm vum Cookie/Identifikatioun vum grousse Banner"
 }

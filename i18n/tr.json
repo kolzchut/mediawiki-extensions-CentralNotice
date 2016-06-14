@@ -12,7 +12,8 @@
 			"Szoszv",
 			"Sayginer",
 			"Sucsuzz",
-			"Violetanka"
+			"Violetanka",
+			"HakanIST"
 		]
 	},
 	"centralnotice": "Merkezi uyarı yöneticisi",
@@ -119,9 +120,6 @@
 	"centralnotice-banner-collapsible": "Daralabilir",
 	"centralnotice-banner-fundraising": "Bu bir bağış toplama afişidir",
 	"centralnotice-banner-display-on": "Şurada görüntüle",
-	"centralnotice-banner-autolink": "Açılış sayfası bağlantısını otomatik olarak oluştur",
-	"centralnotice-banner-landing-pages": "Açılış sayfaları (virgülle ayrılmış)",
-	"centralnotice-banner-landing-pages-default": "ör. JimmyAppeal01",
 	"centralnotice-geo": "Geo-hedefli",
 	"centralnotice-countries": "Ülkeler",
 	"centralnotice-global-allocation": "Küresel ayırma",
@@ -219,5 +217,6 @@
 	"centralnotice-start-date": "Başlangıç tarihi (UTC)",
 	"centralnotice-start-time": "Başlangıç zamanı (UTC)",
 	"centralnotice-end-date": "Bitiş tarihi (UTC)",
-	"centralnotice-end-time": "Bitiş zamanı (UTC)"
+	"centralnotice-end-time": "Bitiş zamanı (UTC)",
+	"centralnotice-large-banner-limit-days": "Bası uzunluğu"
 }

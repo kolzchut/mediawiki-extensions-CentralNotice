@@ -92,19 +92,9 @@ $wgCentralSelectedBannerDispatcher = false;
 // for cached content
 $wgCentralNoticeLoader = true;
 
-// Flag for turning on fundraising specific features
-$wgNoticeEnableFundraising = true;
-
 // Base URL for default fundraiser landing page (without query string)
 // TODO Remove, no longer used
 $wgNoticeFundraisingUrl = 'https://donate.wikimedia.org/wiki/Special:LandingCheck';
-
-// Source for live counter information
-$wgNoticeCounterSource = 'http://wikimediafoundation.org/wiki/Special:ContributionTotal?action=raw';
-$wgNoticeDailyCounterSource = 'http://wikimediafoundation.org/wiki/Special:DailyTotal?action=raw';
-
-// URL for a banner close button
-$wgNoticeCloseButton = '//upload.wikimedia.org/wikipedia/foundation/2/20/CloseWindow19x19.png';
 
 // URL prefix where banner screenshots are stored. False if this feature is disabled.
 // meta.wikimedia.org CentralNotice banners are archived at 'http://fundraising-archive.wmflabs.org/banner/'
@@ -128,6 +118,15 @@ $wgNoticeCookieDurations = array(
 	// Defaults to one year.
 	'donate' => 31536000
 );
+
+/**
+ * Fallback hide cookie duration, for hide reasons without an entry in
+ * $wgNoticeCookieDurations, if no duration is specified in the request to
+ * Special:HideBanners.
+ * Note: This is just to keep things running in an unexpected edge case. It is
+ * recommended that this value not be intentionally relied on by banners.
+ */
+$wgCentralNoticeFallbackHideCookieDuration = 604800;
 
 /**
  * @var string Timestamp after which old-format 'hide' cookies should be deleted
@@ -210,6 +209,13 @@ $wgCentralNoticePerCampaignBucketExtension = 30;
 // given as a proportion of the "all" list length.
 $wgNoticeListComplementThreshold = 0.75;
 
+// Temporary measure: Campaigns whose banners are all set to this category will
+// use some legacy mechanisms (especially cookies instead of the KVStore).
+// TODO Fix and remove!
+$wgCentralNoticeCategoriesUsingLegacy = array( 'Fundraising', 'fundraising' );
+
+$wgCentralNoticeCookiesToDelete = array();
+
 /** @var $wgNoticeTabifyPages array Declare all pages that should be tabified as CN pages */
 $wgNoticeTabifyPages = array(
 	/* Left side 'namespace' tabs */
@@ -252,24 +258,34 @@ $wgCentralNoticeCampaignMixins = array(
 	'bannerHistoryLogger' => array(
 		'module' => 'ext.centralNotice.bannerHistoryLogger',
 		'nameMsg' => 'centralnotice-banner-history-logger',
+		'helpMsg' => 'centralnotice-banner-history-logger-help',
 		'parameters' => array(
 			'rate' => array(
 				'type' => 'float',
 				'labelMsg' => 'centralnotice-banner-history-logger-rate',
+				'helpMsg' => 'centralnotice-banner-history-logger-rate-help',
 			),
 			'maxEntryAge' => array(
 				'type' => 'integer',
-				'labelMsg' => 'centralnotice-banner-history-logger-max-entry-age'
+				'labelMsg' => 'centralnotice-banner-history-logger-max-entry-age',
+				'helpMsg' => 'centralnotice-banner-history-logger-max-entry-age-help'
 			),
 			'maxEntries' => array(
 				'type' => 'integer',
-				'labelMsg' => 'centralnotice-banner-history-logger-max-entries'
+				'labelMsg' => 'centralnotice-banner-history-logger-max-entries',
+				'helpMsg' => 'centralnotice-banner-history-logger-max-entries-help'
+			),
+			'waitLogNoSendBeacon' => array(
+				'type' => 'integer',
+				'labelMsg' => 'centralnotice-banner-history-logger-wait-log-no-send-beacon',
+				'helpMsg' => 'centralnotice-banner-history-logger-wait-log-no-send-beacon-help'
 			)
 		)
 	),
 	'legacySupport' => array(
 		'module' => 'ext.centralNotice.legacySupport',
 		'nameMsg' => 'centralnotice-legacy-support',
+		'helpMsg' => 'centralnotice-legacy-support-help',
 		'parameters' => array(
 			'setSRISampleRate' => array(
 				'type' => 'boolean',
@@ -284,7 +300,60 @@ $wgCentralNoticeCampaignMixins = array(
 				'labelMsg' => 'centralnotice-banners-not-guaranteed-to-display'
 			)
 		)
-	)
+	),
+	'impressionDiet' => array(
+		'module' => 'ext.centralNotice.impressionDiet',
+		'nameMsg' => 'centralnotice-impression-diet',
+		'helpMsg' => 'centralnotice-impression-diet-help',
+		'parameters' => array(
+			// Can't change cookieName param name, due to existing campaigns
+			// on production
+			'cookieName' => array(
+				'type' => 'string',
+				'labelMsg' => 'centralnotice-impression-diet-identifier',
+				'helpMsg' => 'centralnotice-impression-diet-identifier-help',
+			),
+			'skipInitial' => array(
+				'type' => 'integer',
+				'labelMsg' => 'centralnotice-impression-diet-skip-initial',
+				'helpMsg' => 'centralnotice-impression-diet-skip-initial-help',
+			),
+			'maximumSeen' => array(
+				'type' => 'integer',
+				'labelMsg' => 'centralnotice-impression-diet-maximum-seen',
+				'helpMsg' => 'centralnotice-impression-diet-maximum-seen-help',
+			),
+			'restartCycleDelay' => array(
+				'type' => 'integer',
+				'labelMsg' => 'centralnotice-impression-diet-restart-cycle-delay',
+				'helpMsg' => 'centralnotice-impression-diet-restart-cycle-delay-help',
+			),
+		),
+	),
+	'largeBannerLimit' => array(
+		'module' => 'ext.centralNotice.largeBannerLimit',
+		'nameMsg' => 'centralnotice-large-banner-limit',
+		'helpMsg' => 'centralnotice-large-banner-limit-help',
+		'parameters' => array(
+			'days' => array(
+				'type' => 'integer',
+				'labelMsg' => 'centralnotice-large-banner-limit-days',
+				'helpMsg' => 'centralnotice-large-banner-limit-days-help',
+				'defaultValue' => 250,
+			),
+			'randomize' => array(
+				'type' => 'boolean',
+				'labelMsg' => 'centralnotice-large-banner-limit-randomize',
+				'helpMsg' => 'centralnotice-large-banner-limit-randomize-help',
+			),
+			'identifier' => array(
+				'type' => 'string',
+				'labelMsg' => 'centralnotice-large-banner-limit-identifier',
+				'helpMsg' => 'centralnotice-large-banner-limit-identifier-help',
+				'defaultValue' => 'centralnotice-frbanner-seen-fullscreen',
+			),
+		),
+	),
 );
 
 /* Setup */
@@ -293,5 +362,4 @@ require_once $dir . '/CentralNotice.modules.php';
 
 // Register message files
 $wgMessagesDirs['CentralNotice'] = __DIR__ . '/i18n';
-$wgExtensionMessagesFiles['CentralNotice'] = __DIR__ . "/CentralNotice.i18n.php";
 $wgExtensionMessagesFiles[ 'CentralNoticeAliases' ] = $dir . '/CentralNotice.alias.php';

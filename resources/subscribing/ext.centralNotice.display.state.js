@@ -32,6 +32,28 @@
 			BANNER_CHOSEN:            new Status( 'banner_chosen', 4 ),
 			BANNER_LOADED_BUT_HIDDEN: new Status( 'banner_loaded_but_hidden', 5 ),
 			BANNER_SHOWN:             new Status( 'banner_shown', 6 )
+		},
+
+		// Until T114078 is closed, we minify banner history logs. This lookup
+		// table maps from hide reason string to a numeric code.
+		REASONS = {
+			// Any reason not listed here will be stored as "other".
+			'other': 0,
+			'close': 1,
+			'waitdate': 2,
+			'waitimps': 3,
+			'waiterr': 4, // Deprecated
+			'belowMinEdits': 5,
+			'viewLimit': 6,
+			'seen-fullscreen': 7,
+			'cookies-disabled': 8,
+			'donate': 9,
+			'cookies': 10,
+			'seen': 11,
+			'empty': 12,
+			'waitnorestart': 13, // Deprecated
+			'waitnostorage': 14,
+			'namespace': 15
 		};
 
 	function Status( key, code ) {
@@ -116,8 +138,8 @@
 		state.data.testingBanner = true;
 	}
 
-	function setStatus( s, reasonCode ) {
-		var reasonCodeStr = reasonCode ? '.' + reasonCode : '';
+	function setStatus( s, reason ) {
+		var reasonCodeStr = reason ? ( '.' + state.lookupReasonCode( reason ) ) : '';
 		status = s;
 		state.data.status = s.key;
 		state.data.statusCode = s.code.toString() + reasonCodeStr;
@@ -198,19 +220,32 @@
 
 			if ( cleanForURLSerialization ) {
 				delete dataCopy.getVars;
+				delete dataCopy.mixins;
+				delete dataCopy.tests;
 			}
 
 			return dataCopy;
 		},
 
 		setCampaign: function( c ) {
-			var i,
+			var prop, i,
 				category,
 				campaignCategory = null;
 
 			state.campaign = c;
 			state.data.campaign = state.campaign.name;
 			setStatus( STATUSES.CAMPAIGN_CHOSEN );
+
+			// Provide the names of mixins enabled in this campaign
+			// Note: Object.keys() not available in IE8
+			// Another note: We expose an object to make testing for a specific
+			// mixin easy in IE8, too
+			state.data.mixins = {};
+			for ( prop in state.campaign.mixins ) {
+				if ( state.campaign.mixins.hasOwnProperty( prop ) ) {
+					state.data.mixins[prop] = true;
+				}
+			}
 
 			// Set the campaignCategory property if all the banners in this
 			// campaign have the same category. This is necessary so we can
@@ -232,6 +267,15 @@
 			}
 
 			state.data.campaignCategory = campaignCategory;
+
+			// Is the campaign category among the categories configured to use
+			// legacy mechanisms?
+			state.data.campaignCategoryUsesLegacy = (
+				$.inArray(
+					campaignCategory,
+					mw.config.get( 'wgCentralNoticeCategoriesUsingLegacy' )
+				) !== -1
+			);
 		},
 
 		getCampaign: function() {
@@ -253,9 +297,9 @@
 			state.data.bannersNotGuaranteedToDisplay = true;
 		},
 
-		cancelBanner: function( reason, reasonCode ) {
+		cancelBanner: function( reason ) {
 			state.data.bannerCanceledReason = reason;
-			setStatus( STATUSES.BANNER_CANCELED, reasonCode );
+			setStatus( STATUSES.BANNER_CANCELED, reason );
 
 			// Legacy fields for Special:RecordImpression
 			state.data.result = 'hide';
@@ -266,6 +310,10 @@
 			return status === STATUSES.BANNER_CANCELED;
 		},
 
+		isBannerShown: function() {
+			return status === STATUSES.BANNER_SHOWN;
+		},
+
 		setNoBannerAvailable: function() {
 			setStatus( STATUSES.NO_BANNER_AVAILABLE );
 
@@ -274,9 +322,9 @@
 			state.data.reason = 'empty';
 		},
 
-		setBannerLoadedButHidden: function( reason, reasonCode ) {
+		setBannerLoadedButHidden: function( reason ) {
 			state.data.bannerLoadedButHiddenReason = reason;
-			setStatus( STATUSES.BANNER_LOADED_BUT_HIDDEN, reasonCode );
+			setStatus( STATUSES.BANNER_LOADED_BUT_HIDDEN, reason );
 
 			// Legacy fields for Special:RecordImpression
 			state.data.result = 'hide';
@@ -303,6 +351,33 @@
 
 		setRecordImpressionSampleRate: function( rate ) {
 			state.data.recordImpressionSampleRate = rate;
+		},
+
+		/**
+		 * Register that the current page view is included in a test.
+		 * @param {string} identifier A string to identify the test. Should not contain
+		 *   commas.
+		 */
+		registerTest: function( identifier ) {
+			var tests = state.data.tests = state.data.tests || [];
+
+			// Add if it isn't already registered.
+			if ( $.inArray( identifier, tests ) === -1 ) {
+				tests.push( identifier );
+
+				if ( tests.length === 1 ) {
+					state.data.testIdentifiers = identifier;
+				} else {
+					state.data.testIdentifiers.concat( ',' + identifier );
+				}
+			}
+		},
+
+		lookupReasonCode: function( reasonName ) {
+			if ( reasonName in REASONS ) {
+				return REASONS[reasonName];
+			}
+			return REASONS.other;
 		}
 	};
 } )(  jQuery, mediaWiki );

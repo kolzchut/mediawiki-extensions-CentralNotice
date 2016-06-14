@@ -50,7 +50,8 @@ $wgResourceModules[ 'ext.centralNotice.adminUi' ] = array(
 	'remoteExtPath' => 'CentralNotice/resources',
 	'dependencies' => array(
 		'jquery.ui.datepicker',
-		'jquery.ui.multiselect'
+		'jquery.ui.multiselect',
+		'json'
 	),
 	'scripts'       => 'infrastructure/centralnotice.js',
 	'styles'        => array(
@@ -64,6 +65,13 @@ $wgResourceModules[ 'ext.centralNotice.adminUi' ] = array(
 		'centralnotice-remove-all',
 		'centralnotice-items-selected'
 	)
+);
+
+$wgResourceModules[ 'ext.centralNotice.adminUi.campaignPager' ] = array(
+		'localBasePath' => $dir . '/resources',
+		'remoteExtPath' => 'CentralNotice/resources',
+		'scripts'       => 'infrastructure/ext.centralNotice.adminUi.campaignPager.js',
+		'styles'        => 'infrastructure/ext.centralNotice.adminUi.campaignPager.css',
 );
 
 $wgResourceModules[ 'ext.centralNotice.adminUi.bannerManager' ] = array(
@@ -140,13 +148,36 @@ $wgResourceModules[ 'ext.centralNotice.adminUi.campaignManager' ] = array(
 
 		// Banner history logger
 		'centralnotice-banner-history-logger-rate',
+		'centralnotice-banner-history-logger-rate-help',
 		'centralnotice-banner-history-logger-max-entry-age',
+		'centralnotice-banner-history-logger-max-entry-age-help',
 		'centralnotice-banner-history-logger-max-entries',
+		'centralnotice-banner-history-logger-max-entries-help',
+		'centralnotice-banner-history-logger-wait-log-no-send-beacon',
+		'centralnotice-banner-history-logger-wait-log-no-send-beacon-help',
 
 		// Legacy campaigns
 		'centralnotice-set-record-impression-sample-rate',
 		'centralnotice-custom-record-impression-sample-rate',
 		'centralnotice-banners-not-guaranteed-to-display',
+
+		// Impression diet
+		'centralnotice-impression-diet-identifier',
+		'centralnotice-impression-diet-identifier-help',
+		'centralnotice-impression-diet-maximum-seen',
+		'centralnotice-impression-diet-maximum-seen-help',
+		'centralnotice-impression-diet-restart-cycle-delay',
+		'centralnotice-impression-diet-restart-cycle-delay-help',
+		'centralnotice-impression-diet-skip-initial',
+		'centralnotice-impression-diet-skip-initial-help',
+
+		// Large banner limit
+		'centralnotice-large-banner-limit-days',
+		'centralnotice-large-banner-limit-days-help',
+		'centralnotice-large-banner-limit-randomize',
+		'centralnotice-large-banner-limit-randomize-help',
+		'centralnotice-large-banner-limit-identifier',
+		'centralnotice-large-banner-limit-identifier-help',
 	)
 );
 
@@ -192,6 +223,7 @@ $wgResourceModules[ 'ext.centralNotice.display' ] = array(
 	'styles'        => 'subscribing/ext.centralNotice.display.css',
 	'dependencies'  => array(
 		'ext.centralNotice.geoIP',
+		'ext.centralNotice.kvStore',
 		'jquery.cookie',
 		'json',
 		'mediawiki.Uri',
@@ -229,6 +261,29 @@ $wgResourceModules[ 'ext.centralNotice.bannerHistoryLogger' ] = array(
 	'targets'       => array( 'desktop', 'mobile' ),
 );
 
+$wgResourceModules[ 'ext.centralNotice.impressionDiet' ] = array(
+	'localBasePath' => $dir . '/resources',
+	'remoteExtPath' => 'CentralNotice/resources',
+	'scripts'       => 'subscribing/ext.centralNotice.impressionDiet.js',
+	'dependencies'  => array(
+		'ext.centralNotice.kvStore',
+		'ext.centralNotice.display',
+	),
+	'targets'       => array( 'desktop', 'mobile' ),
+);
+
+$wgResourceModules[ 'ext.centralNotice.largeBannerLimit' ] = array(
+	'localBasePath' => $dir . '/resources',
+	'remoteExtPath' => 'CentralNotice/resources',
+	'scripts'       => 'subscribing/ext.centralNotice.largeBannerLimit.js',
+	'dependencies'  => array(
+		'ext.centralNotice.display',
+		'mediawiki.cookie',
+		'ext.centralNotice.kvStore',
+	),
+	'targets'       => array( 'desktop', 'mobile' ),
+);
+
 $wgResourceModules[ 'ext.centralNotice.legacySupport' ] = array(
 	'localBasePath' => $dir . '/resources',
 	'remoteExtPath' => 'CentralNotice/resources',
@@ -259,12 +314,3 @@ $wgResourceModules[ 'ext.centralNotice.bannerController.mobile' ] = array(
 	),
 	'targets' => array( 'mobile' ),
 );
-
-// Deprecated, left here for cached HTML.
-$wgResourceModules[ 'ext.centralNotice.bannerController.mobiledevice' ] = array();
-
-// Deprecated, left here for cached HTML
-$wgResourceModules[ 'ext.centralNotice.bannerChoiceData' ] = array();
-
-// Deprecated, left here for cached HTML
-$wgResourceModules[ 'ext.centralNotice.bannerController.lib' ] = array();

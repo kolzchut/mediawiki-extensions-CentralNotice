@@ -21,15 +21,10 @@ class SpecialCentralNoticeBanners extends CentralNotice {
 
 	function __construct() {
 		SpecialPage::__construct( 'CentralNoticeBanners' );
+	}
 
-		// Make sure we have a session
-		wfSetupSession();
-
-		// Load things that may have been serialized into the session
-		$this->bannerLanguagePreview = $this->getCNSessionVar(
-			'bannerLanguagePreview',
-			$this->getLanguage()->getCode()
-		);
+	public function doesWrites() {
+		return true;
 	}
 
 	/**
@@ -51,6 +46,14 @@ class SpecialCentralNoticeBanners extends CentralNotice {
 		// Do all the common setup
 		$this->setHeaders();
 		$this->editable = $this->getUser()->isAllowed( 'centralnotice-admin' );
+		// Make sure we have a session
+		$this->getRequest()->getSession()->persist();
+
+		// Load things that may have been serialized into the session
+		$this->bannerLanguagePreview = $this->getCNSessionVar(
+			'bannerLanguagePreview',
+			$this->getLanguage()->getCode()
+		);
 
 		// User settable text for some custom message, like usage instructions
 		$this->getOutput()->setPageTitle( $this->msg( 'noticetemplate' ) );
@@ -355,6 +358,40 @@ class SpecialCentralNoticeBanners extends CentralNotice {
 	}
 
 	/**
+	 * Returns array of navigation links to banner preview URL and
+	 * edit link to the banner's wikipage if the user is allowed.
+	 *
+	 * @return array
+	 */
+	private function getBannerPreviewEditLinks() {
+		$links = array(
+			Linker::linkKnown(
+				SpecialPage::getTitleFor( 'Randompage' ),
+				$this->msg( 'centralnotice-live-preview' )->escaped(),
+				array( 'class' => 'cn-banner-list-element-label-text' ),
+				array(
+					 'banner' => $this->bannerName,
+					 'uselang' => $this->bannerLanguagePreview,
+					 'force' => '1',
+				)
+			)
+		);
+
+		$bannerTitle = Title::newFromText( "Centralnotice-template-{$this->bannerName}", NS_MEDIAWIKI );
+		// $bannerTitle can be null sometimes
+		if ( $bannerTitle && $this->getUser()->isAllowed( 'editinterface' ) ) {
+			$links[] = Linker::link(
+				$bannerTitle,
+				$this->msg( 'centralnotice-banner-edit-onwiki' )->escaped(),
+				array( 'class' => 'cn-banner-list-element-label-text' ),
+				array( 'action' => 'edit' )
+				);
+		}
+
+		return $links;
+	}
+
+	/**
 	 * Display the banner editor and process edits
 	 */
 	protected function showBannerEditor() {
@@ -365,16 +402,9 @@ class SpecialCentralNoticeBanners extends CentralNotice {
 			throw new ErrorPageError( 'noticetemplate', 'centralnotice-generic-error' );
 		}
 		$out->setPageTitle( $this->bannerName );
-		$out->setSubtitle( Linker::link(
-				SpecialPage::getTitleFor( 'Random' ),
-				$this->msg( 'centralnotice-live-preview' ),
-				array( 'class' => 'cn-banner-list-element-label-text' ),
-				array(
-					 'banner' => $this->bannerName,
-					 'uselang' => $this->bannerLanguagePreview,
-					 'force' => '1',
-				)
-			) );
+		$out->setSubtitle(
+			$this->getLanguage()->pipeList( $this->getBannerPreviewEditLinks() )
+		);
 
 		// Generate the form
 		$formDescriptor = $this->generateBannerEditForm( $this->bannerName );
@@ -408,6 +438,7 @@ class SpecialCentralNoticeBanners extends CentralNotice {
 			$this->msg( 'centralnotice-campaigns-using-banner' )->text() ) );
 
 		$pager = new CNCampaignPager( $this, false, $this->banner->getId() );
+		$out->addModules( 'ext.centralNotice.adminUi.campaignPager' );
 		$out->addHTML( $pager->getBody() );
 		$out->addHTML( $pager->getNavigationBar() );
 	}
@@ -496,7 +527,7 @@ class SpecialCentralNoticeBanners extends CentralNotice {
 		);
 
 		/* --- Translatable Messages Section --- */
-		$messages = $banner->getMessageFieldsFromCache( $banner->getBodyContent() );
+		$messages = $banner->getMessageFieldsFromCache();
 
 		if ( $messages ) {
 			// Only show this part of the form if messages exist
@@ -928,8 +959,9 @@ class LanguageSelectHeaderElement extends HTMLSelectField {
 		$html = Xml::openElement( 'table', array( 'class' => 'cn-message-table' ) );
 		$html .= Xml::openElement( 'tr' );
 
+		$code = $wgContLang->getCode();
 		$html .= Xml::element( 'td', array( 'class' => 'cn-message-text-origin-header' ),
-			$wgContLang->fetchLanguageName( $wgContLang->getCode() )
+			Language::fetchLanguageName( $code, $code )
 		);
 
 		$html .= Xml::openElement( 'td', array( 'class' => 'cn-message-text-native-header' ) );

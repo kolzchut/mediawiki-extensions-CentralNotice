@@ -67,7 +67,7 @@
 
 			// Sanity check
 			if ( !( mixinName in campaignMixins ) ) {
-				mw.log( 'Mixin ' + mixinName + ' not registered.' );
+				mw.log.warn( 'Mixin ' + mixinName + ' not registered.' );
 				return;
 			}
 
@@ -80,7 +80,7 @@
 
 			// Another sanity check
 			if ( typeof handler !== 'function' ) {
-				mw.log( hookPropertyName + ' for ' + mixinName + ' not a function.' );
+				mw.log.warn( hookPropertyName + ' for ' + mixinName + ' not a function.' );
 				return;
 			}
 
@@ -102,19 +102,21 @@
 	 */
 	function setUpDataProperty() {
 
-		if ( typeof Object.defineProperty === 'function' ) {
-
+		// try/catch since some browsers don't support Object.defineProperty
+		// or don't support it fully
+		try {
 			Object.defineProperty( cn, 'data', {
 				get: function() { return cn.internal.state.getData(); }
 			} );
 
-		} else {
+			return;
 
-			// FIXME For browsers that don't support defineProperty, we don't
-			// fully respect our internal contract with the state object to
-			// manage data, since we assume the object reference won't change.
-			cn.data = cn.internal.state.getData();
-		}
+		} catch (e) {}
+
+		// FIXME For browsers that don't support defineProperty, we don't
+		// fully respect our internal contract with the state object to
+		// manage data, since we assume the object reference won't change.
+		cn.data = cn.internal.state.getData();
 	}
 
 	/**
@@ -161,7 +163,7 @@
 		// Inject the HTML
 		$( 'div#centralNotice' )
 			.attr( 'class',
-			mw.html.escape( 'cn-' + cn.internal.state.getData().category ) )
+			mw.html.escape( 'cn-' + cn.internal.state.getData().bannerCategory ) )
 			.prepend(
 				'<!--googleoff: all-->' + bannerHtml + '<!--googleon: all-->'
 			);
@@ -180,7 +182,7 @@
 		url.extend( state.getDataCopy( true ) );
 
 		if ( navigator.sendBeacon ) {
-			navigator.sendBeacon( url.toString() );
+			try { navigator.sendBeacon( url.toString() ); } catch ( e ) {}
 		} else {
 			setTimeout( function () {
 				document.createElement( 'img' ).src = url.toString();
@@ -243,19 +245,22 @@
 		bucketer.process();
 		state.setBucket( bucketer.getBucket() );
 
-		runPreBannerMixinHooks();
-
-		// Cancel banner, if that was requested by code in a pre-banner hook
-		if ( state.isBannerCanceled() ) {
+		// Check the hide cookie and possibly cancel the banner.
+		// We do this before running pre-banner hooks so that these can count
+		// stuff differently if there was a hide cookie.
+		hide.processCookie();
+		if ( hide.shouldHide() ) {
+			state.cancelBanner( hide.getReason() );
+			runPreBannerMixinHooks();
 			runPostBannerMixinHooks();
 			recordImpression();
 			return;
 		}
 
-		// Check the hide cookie and possibly cancel the banner
-		hide.processCookie();
-		if ( hide.shouldHide() ) {
-			state.cancelBanner( hide.getReason(), hide.getReasonCode() );
+		runPreBannerMixinHooks();
+
+		// Cancel banner, if that was requested by code in a pre-banner hook
+		if ( state.isBannerCanceled() ) {
 			runPostBannerMixinHooks();
 			recordImpression();
 			return;
@@ -312,7 +317,8 @@
 	 *         object should be easily serializable to URL parameters (i.e.,
 	 *         not objects or arrays). Note: this should be seen as read-only
 	 *         for any code outside this module. No properties that code in this
-	 *         module reacts to are available on mw.centralNotice.data.
+	 *         module reacts to are available on mw.centralNotice.data. Also,
+	 *         it will be deprecated soon. Use getDataProperty( prop ) instead.
 	 *
 	 *     bannerLoadedPromise: A promise that resolves when a banner is loaded.
 	 *         This property is only set after a banner has been chosen.
@@ -413,11 +419,17 @@
 		 * Call this from the preBannerMixinHook to prevent a banner from
 		 * being chosen and loaded.
 		 * @param {string} reason An explanation of why the banner was canceled.
-		 * @param {number} reasonCode A code corresponding to this reason
-		 *   (temporary measure, for use in minified banner history log).
 		 */
-		cancelBanner: function( reason, reasonCode ) {
-			cn.internal.state.cancelBanner( reason, reasonCode );
+		cancelBanner: function( reason ) {
+			cn.internal.state.cancelBanner( reason );
+		},
+
+		isBannerCanceled: function () {
+			return cn.internal.state.isBannerCanceled();
+		},
+
+		isBannerShown: function() {
+			return cn.internal.state.isBannerShown();
 		},
 
 		/**
@@ -511,6 +523,12 @@
 			cn.internal.hide.setHideWithCloseButtonCookies();
 		},
 
+		customHideBanner: function ( reason, duration ) {
+			// Hide the banner element
+			$( '#centralNotice' ).hide();
+			cn.internal.hide.setHideCookies( reason, duration );
+		},
+
 		hideBanner: function() {
 			cn.hideBannerWithCloseButton();
 		},
@@ -520,11 +538,29 @@
 		 * bucketer must be initialized first. However, code in campaign mixin
 		 * hook handlers and banners can safely assume that's the case.
 		 *
-		 * The current bucket can be read from mw.centralNotice.data.bucket
+		 * The current bucket can be read using
+		 * mw.centralNotice.getDataProperty( 'bucket' )
 		 */
 		setBucket: function( bucket ) {
 			cn.internal.bucketer.setBucket( bucket );
 			cn.internal.state.setBucket( bucket );
+		},
+
+		/**
+		 * Register that the current page view is included in a test.
+		 * @param {string} identifier A string to identify the test. Should not contain
+		 *   commas.
+		 */
+		registerTest: function( identifier ) {
+			cn.internal.state.registerTest( identifier );
+		},
+
+		/**
+		 * Get the value of a property used in campaign/banner selection and
+		 * display, and for recording the results of that process.
+		 */
+		getDataProperty: function( prop ) {
+			return cn.internal.state.getData()[prop];
 		}
 	};
 

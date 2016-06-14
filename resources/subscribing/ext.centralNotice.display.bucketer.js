@@ -1,64 +1,157 @@
 /**
  * Storage, retrieval and other processing of buckets. Provides
  * cn.internal.bucketer.
+ *
+ * Bucket assignments are stored using the kvStore, in LocalStorage or a cookie.
+ * To maximize concision for users that fall back to cookies, the value consists
+ * of '*'-separated campaigns, each of which is made up of '!'-separated fields.
+ * The format is:
+ *
+ *  NAME!START!END!VALUE[*NAME!START!END!VALUE..]
+ *
+ * - Start is stored as a second offset from UNIX timestamp 1400000000
+ *   (March 2014).
+ * - End is stored as second offset from start.
+ *
+ * For example:
+ *
+ * 'WikiConference_USA!39942400!3729600!2'
+ *
+ * ...would be deserialized to:
+ *
+ * { WikiConference_USA: { start: 1439942400, end: 1443672000, val: 2 } }
+ *
  */
 ( function ( $, mw ) {
 
-	var BUCKET_COOKIE_NAME = 'centralnotice_buckets_by_campaign',
-
-		// Bucket objects by campaign; properties are campaign names.
-		// Retrieved from bucket cookie, if available.
-		buckets,
+	// Bucket objects by campaign; properties are campaign names.
+	// Retrieved from kvStore (which uses LocalStorage or a fallback cookie)
+	// or from a legacy cookie.
+	var buckets = null,
 
 		// The campaign we're working with.
-		campaign = null;
+		campaign = null,
+
+		kvStore = mw.centralNotice.kvStore,
+		multiStorageOption,
+
+		// Name of the legacy cookie for CentralNotice buckets. Its value is
+		// a compact serialization of buckets in the the same format as is
+		// currently used here.
+		LEGACY_COOKIE = 'CN',
+
+		STORAGE_KEY = 'buckets';
 
 	/**
-	 * Attempt to get buckets from the bucket cookie. If there is no
-	 * bucket cookie, set buckets to an empty object.
+	 * Escape '*' and '!' in a campaign name to make it safe for serialization.
 	 */
-	function loadBuckets() {
-		var cookieVal = $.cookie( BUCKET_COOKIE_NAME );
-
-		if ( cookieVal ) {
-			try {
-				buckets = JSON.parse( cookieVal );
-			} catch ( e ) {
-				// Very likely a syntax error due to corrupt cookie contents
-				buckets = {};
-			}
-		} else {
-			buckets = {};
-		}
+	function escapeCampaignName( name ) {
+		return name.replace( /[*!]/g, function ( match ) {
+			return '&#' + match.charCodeAt( 0 );
+		} );
 	}
 
 	/**
-	 * Store buckets in the bucket cookie. The cookie will be set to expire
-	 * after the all the buckets it contains do.
+	 * Decode any escaped '*' and '!' characters in a serialized campaign name.
 	 */
-	function storeBuckets() {
-		var now = new Date(),
-			latestDate,
-			campaignName, bucketEndDate;
+	function decodeCampaignName( name ) {
+		return name.replace( /&#(33|42)/, function ( match, $1 ) {
+			return String.fromCharCode( $1 );
+		} );
+	}
 
-		// Cycle through the buckets to find the latest end date
-		latestDate = now;
-		for ( campaignName in buckets ) {
+	function parseSerializedBuckets( serialized ) {
 
-			bucketEndDate = new Date();
-			bucketEndDate.setTime( buckets[campaignName].end * 1000 );
+		var parsedBuckets = {};
 
-			if ( bucketEndDate > latestDate ) {
-				latestDate = bucketEndDate;
+		$.each( serialized.split( '*' ), function ( idx, strBucket ) {
+			var parts = strBucket.split( '!' ),
+				key = decodeCampaignName( parts[0] ),
+				start = parseInt( parts[1], 10 ) + 14e8,
+				end = start + parseInt( parts[2], 10 ),
+				val = parseInt( parts[3], 10 );
+
+			if ( key && start && end && !isNaN( val ) ) {
+				parsedBuckets[ key ] = {
+					start: start,
+					end: end,
+					val: val
+				};
 			}
+		} );
+
+		return parsedBuckets;
+	}
+
+	/**
+	 * Check legacy bucket cookie, and try to migrate. If a legacy cookie is
+	 * found, load buckets from there.
+	 *
+	 * @returns {boolean} true if a legacy cookie was migrated, false if not
+	 */
+	function possiblyLoadAndMigrateLegacyBuckets() {
+
+		var cookieVal = $.cookie( LEGACY_COOKIE );
+
+		if ( cookieVal ) {
+
+			// We need to deserialize and store again to determine ttl
+			buckets = parseSerializedBuckets( cookieVal );
+			storeBuckets();
+			$.removeCookie( LEGACY_COOKIE, { path: '/' } );
+			return true;
 		}
 
-		latestDate.setDate( latestDate.getDate() + 1 );
+		return false;
+	}
 
-		// Store the buckets in the cookie
-		$.cookie( BUCKET_COOKIE_NAME,
-			JSON.stringify( buckets ),
-			{ expires: latestDate, path: '/' }
+	/**
+	 * Attempt to get buckets from the storage. If no stored buckets are
+	 * found, set buckets to an empty object.
+	 */
+	function loadBuckets() {
+
+		var val = kvStore.getItem(
+			STORAGE_KEY,
+			kvStore.contexts.GLOBAL,
+			multiStorageOption
+		);
+
+		buckets = ( val ? parseSerializedBuckets( val ) : {} );
+	}
+
+	/**
+	 * Store buckets using the kvStore. The storage item will be set to
+	 * expire after the all the buckets it contains do.
+	 *
+	 * Though compact serialization is no longer needed for the majority
+	 * of users, who'll get LocalStorage, it's useful for those who fall
+	 * back to cookies, and it seems preferable to keep things consistent.
+	 */
+	function storeBuckets() {
+		var expires = Math.ceil( ( new Date() ) / 1000 ),
+			serialized = $.map( buckets, function ( opts, key ) {
+				var parts = [
+					escapeCampaignName( key ),
+					Math.floor( opts.start - 14e8 ),
+					Math.ceil( opts.end - opts.start ),
+					opts.val
+				];
+
+				if ( opts.end > expires ) {
+					expires = Math.ceil( opts.end );
+				}
+
+				return parts.join( '!' );
+			} ).join( '*' );
+
+		kvStore.setItem(
+			STORAGE_KEY,
+			serialized,
+			kvStore.contexts.GLOBAL,
+			// Convert expires to ttl in days
+			Math.ceil( ( expires - ( new Date() ) / 1000 ) / 86400 ),
+			multiStorageOption
 		);
 	}
 
@@ -76,11 +169,11 @@
 
 	/**
 	 * Do all things bucket:
-	 * - Get buckets from the cookie, if available.
+	 * - Get buckets from the kvStore or legacy cookie, if available.
 	 * - If necessary, generate a random bucket for the campaign.
 	 * - Ensure the stored end date for this campaign is up-to-date.
 	 * - Go through all the buckets, purging expired buckets.
-	 * - Store the updated bucket data in the cookie.
+	 * - Store the updated bucket data using the kvStore.
 	 *
 	 * This should be called before a bucket is requested but after
 	 * setCampaign() has been called.
@@ -103,17 +196,29 @@
 		bucketEndDate.setTime( campaign.end * 1000 );
 		bucketEndDate.setUTCDate( bucketEndDate.getUTCDate() + extension );
 
-		loadBuckets();
+		// Check if and how we can store buckets. Allow cookie fallback in all
+		// cases in which localStorage isn't available.
+
+		// If we have no storage options (cookies and localStorage disabled),
+		// loading and storing buckets will be no-ops, and a new bucket will be
+		// chosen every time.
+		multiStorageOption = kvStore.getMultiStorageOption( true );
+
+		// In all cases, check for a legacy cookie and try to migrate if one
+		// was found. Otherwise, load normally.
+		if ( !possiblyLoadAndMigrateLegacyBuckets() ) {
+			loadBuckets();
+		}
+
 		bucket = buckets[campaignName];
 
 		// If we have a valid bucket, just check and possibly update its
 		// expiry.
 
-		// Note that buckets that are expired but that are found in
-		// the cookie (because they didn't have the chance to get
-		// purged) are not considered valid. In that case, for
-		// consistency, we choose a new random bucket, just as if
-		// no bucket had been found.
+		// Note that buckets that are expired but that were retrieved from
+		// storage (because they didn't have the chance to get purged) are
+		// not considered valid. In that case, for consistency, we choose a
+		// new random bucket, just as if no bucket had been found.
 
 		if ( bucket && bucketEndDate > now ) {
 
@@ -189,6 +294,7 @@
 		 * setCampaign() and process() must have been called first. (Normally
 		 * they're called by mw.centralNotice.chooseAndMaybeDisplay(). Calls
 		 * to this method from mixin hooks don't have to worry about this.)
+		 * @returns {Number}
 		 */
 		getBucket: function() {
 			return buckets[campaign.name].val;
@@ -200,11 +306,11 @@
 		 * setCampaign() and process() must have been called first. (Normally
 		 * they're called by mw.centralNotice.chooseAndMaybeDisplay(). Calls
 		 * to this method from mixin hooks don't have to worry about this.)
+		 * @param {Number} val The numeric bucket value to store
 		 */
 		setBucket: function( val ) {
 			buckets[campaign.name].val = val;
 			storeBuckets();
 		}
 	};
-
 } )( jQuery, mediaWiki );

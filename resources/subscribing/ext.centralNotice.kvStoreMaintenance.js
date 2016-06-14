@@ -1,130 +1,132 @@
 /**
- * Module for maintenance of items in kvStore. Specifically, the module keeps
- * track of items' expiry date and remove expired items. It's separate from
- * kvStore because most of the time we only need these facilities, not the whole
- * kvStore.
+ * Module for maintenance of items in kvStore. During idle time, it checks the
+ * expiry times of items and removes those that expired a specified "leeway"
+ * time ago.
  *
  * This module provides an API at mw.centralNotice.kvStoreMaintenance.
  */
 ( function ( $, mw ) {
-	var METADATA_KEY = 'CentralNoticeKVMetadata',
+	var	cn,
+		now = new Date().getTime() / 1000,
 
-	// TTL of KV store items is 1/2 year, in seconds
-	ITEM_TTL = 15768000,
-	metadata = null,
-	isAvailable = typeof window.localStorage === 'object',
-	now = Math.round( ( new Date() ).getTime() / 1000 ),
-	maintenance;
+		// Regex to find kvStore localStorage keys. Must correspond with PREFIX
+		// in ext.centralNotice.kvStore.js.
+		PREFIX_REGEX = /^CentralNoticeKV/,
+
+		// Must coordinate with PREFIX_IN_COOKIES and SEPARATOR_IN_COOKIES in
+		// ext.centralNotice.kvStore.js.
+		PREFIX_AND_SEPARATOR_IN_COOKIES = 'CN!',
+
+		// Time past expiry before actually removing items: 1 day (in seconds).
+		// (This should prevent race conditions among browser tabs.)
+		LEEWAY_FOR_REMOVAL = 86400,
+
+		// Minimum amount of time (in milliseconds) for an iteration involving localStorage access.
+		MIN_WORK_TIME = 3;
 
 	/**
-	 * Convenience method for a check and load that we need in several methods.
-	 * @returns {boolean} true if localStorage is available and metadata is
-	 *   loaded; false if no localStorage or there was a problem loading
-	 *   metadata.
+	 * @return {jQuery.Promise} List of key strings
 	 */
-	function initialCheckAndLoad() {
-		if ( !isAvailable ) {
-			return false;
-		}
+	function getKeys() {
+		return $.Deferred( function ( d ) {
+			mw.requestIdleCallback( function ( deadline ) {
+				var key,
+					keys = [],
+					index = localStorage.length;
 
-		if ( !metadata ) {
-			if ( !loadMetadata() ) {
-				return false;
+				// We don't expect to have more keys than we can handle in a single iteration.
+				// But just in case, ensure we don't stall for too long.
+				while ( index-- > 0 && deadline.timeRemaining() > MIN_WORK_TIME ) {
+					key = localStorage.key( index );
+					// Operate only on our own localStorage items.
+					// Also recheck key existence as it may race with other tabs.
+					if ( key !== null && PREFIX_REGEX.test( key ) ) {
+						keys.push( key );
+					}
+				}
+				d.resolve( keys );
+			} );
+		} ).promise();
+	}
+
+	/**
+	 * @return {jQuery.Promise}
+	 */
+	function processKeys( keys ) {
+		return $.Deferred( function ( d ) {
+			var queue = keys.slice();
+			mw.requestIdleCallback( function iterate( deadline ) {
+				var key, rawValue, value;
+				while ( queue[ 0 ] !== undefined && deadline.timeRemaining() > MIN_WORK_TIME ) {
+					key = queue.shift();
+					try {
+						rawValue = localStorage.getItem( key );
+						if ( rawValue ) {
+							value = JSON.parse( rawValue );
+							if ( !value.expiry || ( value.expiry + LEEWAY_FOR_REMOVAL ) < now ) {
+								localStorage.removeItem( key );
+							}
+						}
+					} catch ( e ) {
+						localStorage.removeItem( key );
+						if ( cn.kvStore ) {
+							cn.kvStore.setMaintenanceError( key );
+						}
+					}
+				}
+				if ( queue[ 0 ] !== undefined ) {
+					// Time's up, continue later
+					mw.requestIdleCallback( iterate );
+				} else {
+					d.resolve();
+				}
+			} );
+		} ).promise();
+	}
+
+	function purgeFallbackCookies() {
+		var cookies = document.cookie.split( ';' ),
+			i, matches,
+			r = new RegExp( '^' + PREFIX_AND_SEPARATOR_IN_COOKIES + '[^=]*(?=\=)' );
+
+		for ( i = 0; i < cookies.length; i++ ) {
+			matches = cookies[i].trim().match( r );
+			if ( matches ) {
+				document.cookie = matches[0] +
+					'=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
 			}
 		}
-
-		return true;
-	}
-
-	function loadMetadata() {
-		var rawValue = localStorage.getItem( METADATA_KEY );
-
-		if ( rawValue === null ) {
-			metadata = {};
-			return true;
-		}
-
-		try {
-			metadata = JSON.parse( rawValue );
-		} catch ( e ) {
-			return false;
-		}
-
-		return true;
-	}
-
-	function saveMetadata() {
-		localStorage.setItem( METADATA_KEY, JSON.stringify( metadata ) );
 	}
 
 	// Don't assume mw.centralNotice has or hasn't been initialized
-	mw.centralNotice = ( mw.centralNotice || {} );
+	mw.centralNotice = cn = ( mw.centralNotice || {} );
 
 	/**
 	 * Public API
 	 */
-	maintenance = mw.centralNotice.kvStoreMaintenance = {
+	cn.kvStoreMaintenance = {
 
 		/**
-		 * This will be set to true once expired items have been removed.
+		 * Start the removal of expired KVStore items. Also check for fallback
+		 * cookies and remove them if LocalStorage is available.
+		 *
+		 * @return {jQuery.Promise}
 		 */
-		expiredItemsRemoved: false,
-
-		/**
-		 * Update or create an item's metadata, giving it ITEM_TTL time to live.
-		 * @param {string} lsKey The full key used in localStorage
-		 * @returns {boolean} false if there was a problem, true otherwise
-		 */
-		touchItem: function ( lsKey ) {
-
-			if ( !initialCheckAndLoad() ) {
-				return false;
-			}
-
-			metadata[lsKey] = now + ITEM_TTL;
-			saveMetadata();
-			return true;
-		},
-
-		/**
-		 * Remove metadata for an item. This should be called when an item
-		 * is removed.
-		 * @param {string} lsKey The full key used in localStorage
-		 * @returns {boolean} false if there was a problem, true otherwise
-		 */
-		removeItem: function ( lsKey ) {
-
-			if ( !initialCheckAndLoad() ) {
-				return false;
-			}
-
-			delete metadata[lsKey];
-			saveMetadata();
-			return true;
-		},
-
-		/**
-		 * Remove expired KVStore items.
-		 * @returns {boolean} false if there was a problem, true otherwise.
-		 */
-		removeExpiredItems: function () {
-
-			var lsKey;
-
-			if ( !initialCheckAndLoad() ) {
-				return false;
-			}
-
-			for ( lsKey in metadata ) {
-				if ( metadata[lsKey] < now ) {
-					localStorage.removeItem( lsKey );
-					delete metadata[lsKey];
+		doMaintenance: function () {
+			try {
+				if ( !window.localStorage || !localStorage.length ) {
+					return $.Deferred().resolve();
 				}
+			} catch ( e ) {
+				return $.Deferred().resolve();
 			}
 
-			maintenance.expiredItemsRemoved = true;
-			saveMetadata();
-			return true;
+			// Fallback cookies? LocalStorage seems to work, so purge them.
+			if ( document.cookie.indexOf( PREFIX_AND_SEPARATOR_IN_COOKIES ) !== -1 ) {
+				purgeFallbackCookies();
+			}
+
+			return getKeys().then( processKeys );
 		}
 	};
 
