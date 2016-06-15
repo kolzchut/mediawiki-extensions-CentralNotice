@@ -513,7 +513,7 @@ class SpecialCentralNoticeBanners extends CentralNotice {
 		);
 
 		$mixinNames = array_keys( $wgCentralNoticeBannerMixins );
-		$availableMixins = array_combine( $mixinNames, $mixinNames );
+		$availableMixins = count( $mixinNames ) > 0 ? array_combine( $mixinNames, $mixinNames ): array();
 		$selectedMixins = array_keys( $banner->getMixins() );
 		$formDescriptor['mixins'] = array(
 			'section' => 'settings',
