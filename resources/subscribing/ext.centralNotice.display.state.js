@@ -67,11 +67,8 @@
 	function getDeviceCode() {
 		var ua;
 
-		// If we're on the desktop site, all your device are belong to DESKTOP
-		// TODO Fix this! Skin != device. Maybe screen width? P.S. Talk to users.
-		// TODO Make a test for this; it could stop working without notice.
-		// See also https://phabricator.wikimedia.org/T71366
-		if ( mw.config.get('skin') !== 'minerva' ) {
+		// Patch for non-Wikimedia sites - depends on extension:MobileDetect (>= 2.1a)
+		if ( mw.config.get('wgIsMobile') !== true ) {
 			return DEVICES.DESKTOP;
 		}
 
