@@ -118,7 +118,7 @@
 
 		// No need to switch if the banner's already hidden or we're already
 		// on a small banner bucket
-		if ( cn.isBannerCanceled() || !isLarge() ) {
+		if ( cn.isBannerCanceled() || !cn.isBannerShown() || !isLarge() ) {
 			return;
 		}
 
